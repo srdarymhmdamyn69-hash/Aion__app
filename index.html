@@ -31,7 +31,7 @@ iframe{width:100%;height:320px;border:0;border-radius:14px;background:#dfe6e2}
 .big{width:90px;height:90px;border-radius:50%;background:#e8f7ef;border:3px solid var(--g);margin:10px auto;display:block;overflow:hidden}
 .info{text-align:center;color:var(--m);font-size:14px}
 .back{background:none;color:var(--g);width:auto;margin:0;padding:6px 10px}
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--d);color:#fff;padding:10px 18px;border-radius:20px;font-size:14px;display:none;z-index:9;max-width:90%;text-align:center}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--d);color:#fff;padding:10px 18px;border-radius:20px;font-size:14px;display:none;z-index:2000;max-width:90%;text-align:center}
 #meta{font-size:14px;color:var(--m);text-align:center;margin:6px 0}
 .pay{display:flex;gap:10px;margin:10px 0}
 .pay label{flex:1;border:2px solid #d5dcd8;border-radius:12px;padding:12px;text-align:center;cursor:pointer;font-weight:bold;font-size:14px}
@@ -94,6 +94,7 @@ iframe{width:100%;height:320px;border:0;border-radius:14px;background:#dfe6e2}
       <label id="lcard"><input type="radio" name="pay" value="card">کارت به کارت</label>
     </div>
     <div class="cardbox" id="cardbox"></div>
+    <button id="reqBtn">ثبت درخواست برای سفیران آیون</button>
     <button class="dark" id="baladBtn">مشاهده مسیر در بلد</button>
     <button id="baleBtn">ارسال درخواست در بله</button>
     <button class="alt" id="smsBtn">ارسال درخواست با پیامک</button>
@@ -168,6 +169,7 @@ const PHONE="0999368097";
 const INVITE_LINK="https://srdarymhmdamyn69-hash.github.io/Aion__app/";            // لینک دعوت دوستان را اینجا بگذارید
 const CARD_NUMBER="6219861418301528";            // شماره کارت برای کارت به کارت
 const CARD_OWNER="مهناز مرادی";             // نام صاحب کارت
+const TOPIC="aion-requests-k7x2q9m4"; // باید در برنامه سفیران هم همین باشد
 /* =================== */
 
 const $=id=>document.getElementById(id);
@@ -195,7 +197,7 @@ function renderNotifs(){
 /* سفرها */
 function renderTrips(){
   const t=get('aion_trips',[]);
-  $('tripList').innerHTML=t.length?t.map(x=>'<div class="item"><b>از:</b> '+esc(x.o)+'<br><b>به:</b> '+esc(x.d)+'<small>'+(x.pay==='card'?'کارت به کارت':'پول نقدی')+' | '+(x.via==='bale'?'ارسال در بله':'ارسال با پیامک')+' | '+fmt(x.t)+'</small></div>').join(''):'<div class="empty">هنوز سفری ثبت نشده است</div>';
+  $('tripList').innerHTML=t.length?t.map(x=>'<div class="item"><b>از:</b> '+esc(x.o)+'<br><b>به:</b> '+esc(x.d)+'<small>'+(x.pay==='card'?'کارت به کارت':'پول نقدی')+' | '+(x.via==='bale'?'ارسال در بله':x.via==='app'?'ثبت برای سفیران':'ارسال با پیامک')+' | '+fmt(x.t)+'</small></div>').join(''):'<div class="empty">هنوز سفری ثبت نشده است</div>';
   $('clrTrips').style.display=t.length?'block':'none';
 }
 $('clrTrips').onclick=()=>{set('aion_trips',[]);renderTrips();toast('سفرها پاک شد')};
@@ -204,7 +206,7 @@ $('clrTrips').onclick=()=>{set('aion_trips',[]);renderTrips();toast('سفرها 
 function enter(){
   $('pname').textContent=user.fn+' '+user.ln;
   $('pmail').textContent=user.em;
-  updBadge();show('home');
+  updBadge();show('home');listen();
 }
 $('regBtn').onclick=()=>{
   const fn=$('fn').value.trim(),ln=$('ln').value.trim(),em=$('em').value.trim(),pw=$('pw').value,pw2=$('pw2').value;
@@ -253,14 +255,14 @@ document.querySelectorAll('input[name=pay]').forEach(r=>r.onchange=updPay);
 
 /* مسیر */
 async function geocode(q){
-  const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=fa&q='+encodeURIComponent(q));
+  const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ir&accept-language=fa&q='+encodeURIComponent(q));
   const j=await r.json();
   return j[0]?{lat:(+j[0].lat).toFixed(6),lon:(+j[0].lon).toFixed(6)}:null;
 }
 $('routeBtn').onclick=async()=>{
   const o=$('orig').value.trim(),d=$('dest').value.trim();
   if(!o||!d){$('herr').textContent='مبدا و مقصد را وارد کنید';return}
-  $('herr').textContent='';
+  $('herr').textContent='';curId=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   $('map').src='https://maps.google.com/maps?saddr='+encodeURIComponent(o)+'&daddr='+encodeURIComponent(d)+'&dirflg=d&output=embed&hl=fa';
   $('mapCard').style.display='block';updPay();
   $('meta').textContent='در حال محاسبه مسیر...';
@@ -283,6 +285,7 @@ function ready(){
   return true;
 }
 function logTrip(via){
+  pubReq();
   const t=get('aion_trips',[]);
   t.unshift({t:Date.now(),o:$('orig').value.trim(),d:$('dest').value.trim(),pay:pay(),via});
   set('aion_trips',t.slice(0,100));
@@ -304,6 +307,40 @@ $('smsBtn').onclick=()=>{
   logTrip('sms');
   location.href='sms:'+PHONE+'?body='+encodeURIComponent(msg());
 };
+
+
+/* ارتباط با سفیران */
+let curId='',sent={};
+function pubReq(){
+  if(!coords.o||!coords.d||!curId)return false;
+  if(sent[curId])return true;
+  sent[curId]=1;
+  const ids=get('aion_ids',[]);ids.unshift(curId);set('aion_ids',ids.slice(0,30));
+  fetch('https://ntfy.sh/'+TOPIC,{method:'POST',body:JSON.stringify({type:'req',id:curId,t:Date.now(),name:user.fn+' '+user.ln,o:$('orig').value.trim(),d:$('dest').value.trim(),oc:[+coords.o.lat,+coords.o.lon],dc:[+coords.d.lat,+coords.d.lon]})}).catch(()=>{sent[curId]=0});
+  return true;
+}
+$('reqBtn').onclick=()=>{
+  if(!ready())return;
+  if(!coords.o||!coords.d){toast('آدرس روی نقشه پیدا نشد؛ آدرس را دقیق تر و با نام شهر بنویسید');return}
+  if(sent[curId]){toast('این درخواست قبلا ثبت شده است');return}
+  logTrip('app');
+  toast('درخواست شما برای سفیران آیون ارسال شد');
+};
+let es;
+function listen(){
+  try{
+    if(es)es.close();
+    es=new EventSource('https://ntfy.sh/'+TOPIC+'/sse?since=30m');
+    es.onmessage=e=>{try{
+      const d=JSON.parse(e.data);if(d.event!=='message')return;
+      const m=JSON.parse(d.message);
+      if(m.type==='accept'&&get('aion_ids',[]).includes(m.id)&&!get('aion_acc',[]).includes(m.id)){
+        const a=get('aion_acc',[]);a.push(m.id);set('aion_acc',a);
+        addNotif('سفیر '+(m.driver||'آیون')+' درخواست سفر شما را پذیرفت');toast('سفیر درخواست شما را پذیرفت');
+      }
+    }catch(x){}};
+  }catch(e){}
+}
 
 user=get('aion_user',null);
 if(user)enter();
